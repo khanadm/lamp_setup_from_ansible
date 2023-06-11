@@ -1,0 +1,5 @@
+[client1]
+#Put woker1 ip here
+
+[client2]
+# Put woker ip here ansible_user=root ansible_ssh_pass=r
