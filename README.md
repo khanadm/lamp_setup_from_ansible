@@ -10,4 +10,4 @@ Requirement
 5. Server name: devops.ongraph.com
 6. Web server (Apache)
    should link to mysql 
-7. If you want to run this playbook put woker's ip in inventory file  
+( NOTE: If you want to run this playbook put woker's ip in inventory file & set your path in ansible.cfg file )
