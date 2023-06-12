@@ -1,35 +1,21 @@
 ---
-- hosts: client1
-  become: yes
+- hosts: cilent1
   tasks:
     - name: Add the user 'Ongraph' 
       user:
         name: ongraph
         comment: ongraph 
-        uid: 1077
         createhome: yes        # Defaults to yes
         home: /home/MyOngraph
-    - name: Installing php
-      yum:
-        name: php
-        state: present
+    - name: Set directory permissions
+      file:
+        path: /home/MyOngraph
+        mode: "0755"
+        state: directory      
     - name: Installing httpd
       yum:
         name: httpd
-        state: present
-    - name: ensure httpd  is enabled to run on startup
-      service:
-        name: httpd
-        state: started
-        enabled: true
-    - name: "Replace line in file examples"
-      become: yes
-      become_user: root
-      replace:
-        path: /etc/httpd/conf/httpd.conf
-        regexp: '(^DocumentRoot\s)(.*)$'
-        replace: '\1/home/MyOngraph/'
-        backup: yes
+        state: present    
     - name: Creating config file
       copy:
         content: | 
@@ -39,68 +25,71 @@
           AllowOverride None
           Require all granted
           </Directory>
-        dest: /etc/httpd/conf.d/khan.conf
+        dest: /etc/httpd/conf.d/khan.conf 
+    - name: Creating index.html
+      copy:
+        content: 'final testing'
+        dest: /home/MyOngraph/index.html
+    - name: Changing security context of the file or directory
+      shell: chcon -t httpd_sys_rw_content_t /home/MyOngraph/index.html
+    - name: Add ports to firewall
+      firewalld:
+        rich_rule: "rule family='ipv4' port port='80' protocol='tcp' accept"
+        state: enabled
+        permanent: yes
+    - name: reload firewalld
+      command: firewall-cmd --reload      
     - name: Restart service httpd, after changing conf file
       service:
         name: httpd
         state: restarted
-    - name: Creating index.html
-      copy:
-        content: 'this is aakki'
-        dest: /home/MyOngraph/index.html
-    - name: Changing security context of the file or directory
-      shell: chcon -t httpd_sys_rw_content_t /home/MyOngraph/index.html
-    - name: Gather facts
-      debug:
-        msg: "{{ ansible_facts['all_ipv4_addresses'][1] }}"
-    - copy: 
-        dest: /root/ip.txt
-        content: "{{ ansible_facts['all_ipv4_addresses'][1] }}"    
 
 
 
 
 
 
-- hosts: client2
+
+
+
+
+- hosts: cilent2
   become: yes
   vars_files:
    - /root/ansible_poc/variable.yml
   tasks:
-    - debug:
-        msg: "{{ hostvars['cilent1'].ansible_facts['default_ipv4']['address'] }}"
-    - name: Get the IP address of the first host
+    - name: Gather facts
+      debug:
+        msg: "{{ hostvars[groups.cilent1.0].ansible_default_ipv4.address }}"
+    - name: Add ports to firewall
       firewalld:
-        source: 192.168.1.133/32
-        zone: internal
+        rich_rule: "rule family='ipv4' source address='{{ hostvars[groups.cilent1.0].ansible_default_ipv4.address }}' port port='3306' protocol='tcp' accept"
         state: enabled
-    - name: Installing mysql
-      yum:
-        name: mysql  
-        update_cache: yes 
-        state: latest
+        permanent: yes
+    - name: reload firewalld
+      command: firewall-cmd --reload       
+    - name: Install package
+      dnf:
+       name: mysql-server
+       state: present
     - name: start up the mysql service  
-      shell: "systemctl start mysqld"
+      shell: "systemctl start mysqld"   
     - name: ensure mysql is enabled to run on startup  
       service: 
        name: mysqld 
-       state: started 
+       state: restarted 
        enabled: true
+    - name: Install PyMySQL
+      package:
+       name: python3-PyMySQL
+       state: present
     - name: Load variables from a file on the managed host
       include_vars:
          file: variable.yml
     - name: Create MySQL user
       mysql_user:
-        login_user: "root"
-        login_password: "password"
         name: "{{ mysql_user }}"
         password: "{{ mysql_password }}"
         host: '%'
         priv: "*.*:ALL"
         state: present
-    - name: Allow incoming traffic to MySQL
-      firewalld:
-        zone: public
-        port: 3306/tcp
-        source: "{{  first_host_ip }}"
-        state: enabled
